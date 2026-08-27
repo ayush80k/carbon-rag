@@ -14,9 +14,10 @@ app.post("/api/analyze-project", async (req, res) => {
     res.status(200).json(result);
   } catch (error: any) {
     console.error("Analysis error:", error);
-
-    res.status(500).json({
-      error: error.message || "Internal Analysis Error",
+    const message = error.message || "Internal Analysis Error";
+    const isInputError = message.startsWith("Provide a valid") || message.startsWith("Project ID not found");
+    res.status(isInputError ? 400 : 500).json({
+      error: message,
     });
   }
 });

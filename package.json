@@ -2,18 +2,14 @@
   "name": "carbon-rag",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
+  "main": "dist/api.js",
   "scripts": {
     "build": "tsc",
-    "setup:pinecone": "tsc && node dist/setupPinecone.js",
-    "ingest": "tsc && node dist/ingest.js",
-    "search": "tsc && node dist/search.js",
-    "rag": "tsc && node dist/rag.js",
     "ingest:pdf": "tsc && node dist/ingestPdf.js",
-    "project:search": "tsc && node dist/projectSearch.js",
     "api": "tsc && node dist/api.js",
-    "start": "ts-node src/api.ts",
-    "test:analyze": "ts-node test/analyze.test.ts"
+    "start": "npm run api",
+    "test": "tsc -p tsconfig.test.json && node --test .test-dist/test/analyze.test.js",
+    "test:analyze": "npm test"
   },
   "keywords": [],
   "author": "",

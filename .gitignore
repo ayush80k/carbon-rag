@@ -1,4 +1,4 @@
 node_modules/
 dist/
+.test-dist/
 .env
-Voluntary-Registry-Offsets-Database--v2026-04.xlsx
