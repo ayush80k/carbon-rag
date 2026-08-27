@@ -1,20 +1,37 @@
-import { AnalysisRequest, ProjectAnalysisResult } from './types.js';
-import { normalizeInput } from './normalizeInput.js';
-import { calculateIntegrityScore, evaluateRisk } from './scoring.js';
-import { comparePeers } from './comparison.js';
-import { assessPrice } from './pricing.js';
-import { generateExplanation } from './carbonAI.js';
+import {
+  AnalysisRequest,
+  ProjectAnalysisResult,
+} from "./types.js";
+import { normalizeInput } from "./normalizeInput.js";
+import {
+  calculateIntegrityScore,
+  evaluateRisk,
+} from "./scoring.js";
+import { comparePeers } from "./comparison.js";
+import { assessPrice } from "./pricing.js";
+import {
+  generateExplanation,
+  getKnowledgeContext,
+} from "./carbonAI.js";
 
-// Mocking rag.ts import. Replace searchKnowledgeBase with your exact Pinecone function.
-// import { searchKnowledgeBase } from './rag.js';
-const searchKnowledgeBase = async (query: string) => "Knowledge retrieval operational."; 
-
-export async function analyzeProjectPipeline(request: AnalysisRequest): Promise<ProjectAnalysisResult> {
+export async function analyzeProjectPipeline(
+  request: AnalysisRequest
+): Promise<ProjectAnalysisResult> {
   const normalizedData = normalizeInput(request);
+
   const integrityScore = calculateIntegrityScore(normalizedData);
-  const riskIndicators = evaluateRisk(normalizedData, integrityScore);
+
+  const riskIndicators = evaluateRisk(
+    normalizedData,
+    integrityScore
+  );
+
   const peerComparison = comparePeers(normalizedData);
-  const priceAssessment = assessPrice(request.askedPrice, request.currency);
+
+  const priceAssessment = assessPrice(
+    request.askedPrice,
+    request.currency || "INR"
+  );
 
   const baseResult = {
     summary: "Analysis Complete",
@@ -26,13 +43,28 @@ export async function analyzeProjectPipeline(request: AnalysisRequest): Promise<
   };
 
   let aiExplanation: string | null = null;
-  
+
   try {
-    const ragContext = await searchKnowledgeBase(request.question || `Quality factors for ${normalizedData.type} carbon projects`);
-    aiExplanation = await generateExplanation(baseResult, ragContext, request.question);
+    const knowledgeQuery =
+      request.question ||
+      `Carbon credit quality and integrity factors for ${normalizedData.type || "carbon projects"}`;
+
+    const ragContext = await getKnowledgeContext(knowledgeQuery);
+
+    aiExplanation = await generateExplanation(
+      baseResult,
+      ragContext,
+      request.question
+    );
   } catch (error) {
-    console.warn("Continuing without AI Explanation due to service failure.");
+    console.warn(
+      "Continuing without AI explanation due to AI or knowledge retrieval failure:",
+      error
+    );
   }
 
-  return { ...baseResult, aiExplanation };
+  return {
+    ...baseResult,
+    aiExplanation,
+  };
 }
