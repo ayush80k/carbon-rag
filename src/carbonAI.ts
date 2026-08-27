@@ -1,219 +1,152 @@
 import "dotenv/config";
-import * as XLSX from "xlsx";
-import { Pinecone } from "@pinecone-database/pinecone";
-import { GoogleGenerativeAIEmbeddings } from "@langchain/google-genai";
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
-
-const EXCEL_PATH =
-  "./Voluntary-Registry-Offsets-Database--v2026-04.xlsx";
-
-const PROJECT_NAMESPACE = "projects";
-const KNOWLEDGE_NAMESPACE = "carbon-knowledge";
-const INDEX_NAME = "carbon-rag";
-
-const pc = new Pinecone({
-  apiKey: process.env.PINECONE_API_KEY!,
-});
-
-const embeddings = new GoogleGenerativeAIEmbeddings({
-  model: "gemini-embedding-001",
-  apiKey: process.env.GOOGLE_API_KEY!,
-});
+import { ProjectAnalysisResult } from "./types.js";
 
 const llm = new ChatGoogleGenerativeAI({
   model: process.env.GEMINI_MODEL || "gemini-3.6-flash",
   apiKey: process.env.GOOGLE_API_KEY!,
-  temperature: 0.2,
+  temperature: 0.1,
 });
 
-let projects: any[] | null = null;
-
-function clean(value: any): string {
-  if (value === undefined || value === null) return "";
-  return String(value).trim();
-}
-
-function loadProjects() {
-  if (projects) return projects;
-
-  console.log("Loading project database...");
-
-  const workbook = XLSX.readFile(EXCEL_PATH);
-  const sheet = workbook.Sheets["PROJECTS"];
-
-  if (!sheet) {
-    throw new Error("PROJECTS sheet not found");
-  }
-
-  projects = XLSX.utils.sheet_to_json<any>(sheet, {
-    range: 3,
-  });
-
-  console.log(`Loaded ${projects.length} projects.`);
-
-  return projects;
-}
-
-/*
- * Find projects relevant to the user's question.
- *
- * This searches the ENTIRE Excel dataset locally.
- * No embedding API is required for project data.
- */
-function searchProjects(query: string, limit = 15) {
-  const data = loadProjects();
-
-  const words = query
-    .toLowerCase()
-    .split(/\s+/)
-    .filter((word) => word.length >= 3);
-
-  const scored = data.map((project) => {
-    const searchable = [
-      project["Project ID"],
-      project["Project Name"],
-      project["Voluntary Registry"],
-      project["Voluntary Status"],
-      project["Scope"],
-      project["Type"],
-      project["Reduction / Removal"],
-      project["Methodology / Protocol"],
-      project["Region"],
-      project["Country"],
-      project["State"],
-      project["Project Site Location"],
-      project["Project Developer"],
-      project["Project Owner"],
-      project["Verifier"],
-      project["Project Type From the Registry"],
-      project["Project Description"],
-      project["Notes from Registry"],
-      project["Notes from Berkeley Carbon Trading Project"],
-    ]
-      .map(clean)
-      .join(" ")
-      .toLowerCase();
-
-    let score = 0;
-
-    for (const word of words) {
-      if (searchable.includes(word)) {
-        score++;
-      }
-    }
-
-    return { project, score };
-  });
-
-  return scored
-    .filter((item) => item.score > 0)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, limit)
-    .map((item) => item.project);
-}
-
-function projectToText(project: any): string {
-  return `
-Project ID: ${clean(project["Project ID"])}
-Project Name: ${clean(project["Project Name"])}
-Registry: ${clean(project["Voluntary Registry"])}
-Status: ${clean(project["Voluntary Status"])}
-Scope: ${clean(project["Scope"])}
-Type: ${clean(project["Type"])}
-Reduction/Removal: ${clean(project["Reduction / Removal"])}
-Methodology: ${clean(project["Methodology / Protocol"])}
-Region: ${clean(project["Region"])}
-Country: ${clean(project["Country"])}
-State: ${clean(project["State"])}
-Project Location: ${clean(project["Project Site Location"])}
-Developer: ${clean(project["Project Developer"])}
-Credits Issued: ${clean(project["Total Credits \\nIssued"])}
-Credits Retired: ${clean(project["Total Credits \\nRetired"])}
-Credits Remaining: ${clean(project["Total Credits Remaining"])}
-Vintage: ${clean(project["First Year of Project (Vintage)"])}
-Verifier: ${clean(project["Verifier"])}
-Description: ${clean(project["Project Description"])}
-Registry Notes: ${clean(project["Notes from Registry"])}
-Berkeley Notes: ${clean(project["Notes from Berkeley Carbon Trading Project"])}
-`.trim();
-}
-
-async function retrieveKnowledge(query: string) {
-  const index = pc.index(INDEX_NAME);
-
-  const [queryEmbedding] = await embeddings.embedDocuments([query]);
-
-  const result = await index
-    .namespace(KNOWLEDGE_NAMESPACE)
-    .query({
-      vector: queryEmbedding,
-      topK: 5,
-      includeMetadata: true,
-    });
-
-  return result.matches
-    .map((match) => clean(match.metadata?.text))
-    .filter(Boolean);
-}
-
-export async function askCarbonAI(question: string) {
-  const projectResults = searchProjects(question, 15);
-
-  const knowledgeResults = await retrieveKnowledge(question);
-
-  const projectContext = projectResults
-    .map(projectToText)
-    .join("\n\n---\n\n");
-
-  const knowledgeContext = knowledgeResults.join(
-    "\n\n---\n\n"
-  );
-
+export async function generateExplanation(
+  structuredData: Omit<ProjectAnalysisResult, "aiExplanation">,
+  ragContext: string,
+  userQuestion?: string
+): Promise<string> {
   const prompt = `
-You are Carbon AI, an AI-powered carbon-market intelligence assistant for discovering, analyzing, comparing, and evaluating carbon-credit projects.
+You are Carbon AI, an expert assistant for analysing carbon-credit projects.
 
-Your goal is to use the supplied project database and carbon-market knowledge to automatically turn available information into useful, actionable insights for the user.
+Your role is to explain the structured project analysis that has already been calculated by the Carbon AI analysis engine.
 
-You can help users:
-- Discover relevant carbon-credit projects.
-- Find projects based on location, type, methodology, registry, status, or other available attributes.
-- Compare relevant projects using the information available in the project database.
-- Analyze project characteristics and carbon-credit information.
-- Explain carbon-credit quality and evaluation criteria using the supplied carbon-market guidance.
-- Identify important factors, risks, and considerations when evaluating projects.
-- Summarize relevant project information clearly.
+You may use the retrieved carbon-market knowledge as supporting context, but the calculated project analysis is the primary basis for project-specific conclusions.
 
 IMPORTANT RULES:
 
-1. Do not invent project facts.
-2. Treat project database information as factual project data.
-3. Treat carbon-market guidance as general guidance, not as project-specific facts.
-4. If the supplied information does not contain enough information to answer the question, clearly say that the available data is insufficient.
-5. When discussing a specific project, use only information supplied in the project context.
-6. When comparing projects, compare only attributes that are actually available in the supplied data.
-7. Do not claim that a project is "high integrity", "low integrity", "best", "safest", or otherwise superior unless the supplied information directly supports that conclusion.
-8. Do not make financial, purchasing, or investment decisions on behalf of the user. Instead, explain the relevant evidence and considerations.
-9. Clearly distinguish between facts from the project database, guidance from the carbon knowledge base, and conclusions derived from those sources.
-10. When useful, explain why a project or group of projects matches the user's requested criteria.
-11. Be concise, structured, and useful. Prefer bullet points or tables when comparing multiple projects.
+1. Do not invent project facts, prices, market data, peer benchmarks, or numerical values.
+2. Do not change or contradict the calculated integrity score, rating, confidence, risk level, or peer comparison.
+3. Do not claim a project is fraudulent or involved in greenwashing unless the supplied analysis explicitly supports such a risk indicator.
+4. Treat the calculated score and risk indicators as the primary project analysis.
+5. Use retrieved knowledge only as supporting context or general carbon-market guidance.
+6. Clearly distinguish evidence-based concerns from uncertainty, limitations, or missing data.
+7. If price data or market comparison data is insufficient, explicitly state that a reliable fair-price conclusion cannot be made.
+8. Do not present an opinion or heuristic assessment as a verified fact.
+9. Do not make investment or purchasing decisions on behalf of the user.
+10. Be concise, structured, and useful.
 
-PROJECT DATABASE RESULTS:
-${projectContext || "No directly matching project records found."}
+CALCULATED PROJECT ANALYSIS:
 
-CARBON KNOWLEDGE:
-${knowledgeContext || "No relevant knowledge retrieved."}
+Integrity Score:
+${structuredData.integrityScore.totalScore}/100
+
+Rating:
+${structuredData.integrityScore.rating}
+
+Confidence:
+${structuredData.integrityScore.confidence}
+
+Score Breakdown:
+Registry and Verification: ${
+    structuredData.integrityScore.breakdown.registryAndVerification
+  }
+Methodology Evidence: ${
+    structuredData.integrityScore.breakdown.methodologyEvidence
+  }
+Permanence Risk: ${
+    structuredData.integrityScore.breakdown.permanenceRisk
+  }
+Transparency: ${
+    structuredData.integrityScore.breakdown.transparency
+  }
+Vintage: ${
+    structuredData.integrityScore.breakdown.vintage
+  }
+Data Completeness: ${
+    structuredData.integrityScore.breakdown.dataCompleteness
+  }
+
+Strengths:
+${structuredData.integrityScore.strengths.join(", ") || "None identified"}
+
+Concerns:
+${structuredData.integrityScore.concerns.join(", ") || "None identified"}
+
+Limitations:
+${structuredData.integrityScore.limitations.join(", ") || "None identified"}
+
+Risk Level:
+${structuredData.riskIndicators.riskLevel}
+
+Evidence Gaps:
+${structuredData.riskIndicators.evidenceGaps.join(", ") || "None identified"}
+
+Peer Comparison:
+Peer Count: ${structuredData.peerComparison.peerCount}
+Average Peer Score: ${
+    structuredData.peerComparison.averageScore ?? "Not available"
+  }
+Median Peer Score: ${
+    structuredData.peerComparison.medianScore ?? "Not available"
+  }
+Comparison Summary:
+${structuredData.peerComparison.comparisonSummary}
+
+Price Assessment:
+Asked Price: ${
+    structuredData.priceAssessment.askedPrice ?? "Not provided"
+  }
+Currency: ${
+    structuredData.priceAssessment.currency ?? "Not provided"
+  }
+Assessment Mode:
+${structuredData.priceAssessment.mode}
+
+Assessment:
+${structuredData.priceAssessment.assessment}
+
+RETRIEVED CARBON-MARKET KNOWLEDGE:
+${ragContext || "No relevant knowledge was retrieved."}
 
 USER QUESTION:
-${question}
+${userQuestion || "No additional question was asked."}
 
-ANSWER:
+Provide a structured analysis covering:
+
+1. Overall Integrity Assessment
+   - State the integrity score, rating, confidence, and risk level.
+   - Explain the main evidence-based drivers behind the score.
+
+2. Key Strengths
+   - Explain the strongest positive factors from the calculated analysis.
+
+3. Risks, Concerns, and Limitations
+   - Clearly explain concerns, evidence gaps, older vintage issues, permanence issues, transparency gaps, or other limitations only when supported by the supplied analysis.
+
+4. Peer Comparison
+   - Explain how the project performs relative to its available peers.
+   - If peer data is unavailable, clearly say so.
+
+5. Asking Price Assessment
+   - State the asked price and currency when provided.
+   - Use only the supplied price assessment.
+   - If there is no verified price benchmark, clearly state that a definitive fair-price judgement cannot currently be made.
+
+6. Final Conclusion
+   - Give a concise evidence-based conclusion.
+   - Make clear that the integrity score is a heuristic assessment based on available data, not an absolute guarantee of project quality or performance.
+
+Do not output unsupported numerical claims.
 `;
 
-  const response = await llm.invoke(prompt);
+  try {
+    const response = await llm.invoke(prompt);
 
-  return {
-    answer: response.content,
-    projectsUsed: projectResults.length,
-    knowledgeSourcesUsed: knowledgeResults.length,
-  };
+    if (typeof response.content === "string") {
+      return response.content;
+    }
+
+    return JSON.stringify(response.content);
+  } catch (error) {
+    console.error("Gemini failure:", error);
+    throw new Error("AI explanation generation failed.");
+  }
 }
