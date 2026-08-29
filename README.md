@@ -183,7 +183,7 @@ GOOGLE_API_KEY=
 PINECONE_API_KEY=
 PINECONE_INDEX=carbon-rag
 GEMINI_MODEL=gemini-3.6-flash
-APP_PORT=3001
+APP_PORT=3000
 EXCEL_DB_PATH=./Voluntary-Registry-Offsets-Database--v2026-04.xlsx
 ```
 
