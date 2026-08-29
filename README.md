@@ -2,18 +2,22 @@
 
 Carbon AI is a TypeScript backend intelligence and analysis service for evaluating carbon-credit projects using structured project data.
 
-It has two separate responsibilities:
+The service has two separate responsibilities:
 
-- `POST /api/analyze-project` performs deterministic carbon-project analysis: integrity factors, risks, peer comparison, and benchmark-limited price assessment.
-- `POST /api/chat` is the Bhoomi Carbon RAG chatbot. It retrieves static platform knowledge from Pinecone and explains request-scoped live data supplied by the main backend.
+- `POST /api/analyze-project` performs deterministic carbon-project analysis, including integrity factors, risk indicators, greenwashing risk, peer comparison, and benchmark-limited price assessment.
+- `POST /api/chat` provides the Bhoomi Carbon RAG chatbot, which retrieves static platform knowledge from Pinecone and can explain request-scoped live data supplied by an upstream backend.
 
-The chatbot never calculates or overrides prices, optimizer outputs, quality scores, integrity scores, or anomaly results. It can only explain deterministic values supplied in context. The service does not independently verify carbon credits.
+The chatbot and AI explanation layer do **not** calculate or override deterministic prices, integrity scores, risk results, peer comparisons, quality scores, optimizer outputs, or anomaly results. They explain the deterministic information available in their context.
 
-The system is designed to be integrated into an existing website, backend, dashboard, marketplace, or other application.
+Carbon AI does not independently verify carbon credits or external registry claims.
+
+The service is designed to be integrated into an existing website, backend, dashboard, marketplace, or other application.
 
 ---
 
-## What Carbon AI Does
+## Features
+
+### Deterministic Project Analysis
 
 For a carbon project, Carbon AI can provide:
 
@@ -27,27 +31,31 @@ For a carbon project, Carbon AI can provide:
 - Additionality assessment
 - Permanence applicability assessment
 - Double-counting risk assessment
-- Methodology evidence assessment
+- Methodology quality assessment
 - Vintage assessment
 - Evidence gaps and limitations
 - Risk indicators
 - Greenwashing risk assessment
 - Comparable project analysis
-- Peer average and median scores
-- Asking-price assessment when price data is provided
-- Multilingual AI-generated explanation of the complete analysis
+- Peer average and median integrity scores
+- Asking-price assessment when a price is provided
+- Optional multilingual AI explanation of the completed analysis
 
-The output is structured JSON, allowing any frontend or backend to display individual results wherever required.
+The output is structured JSON, allowing a frontend or backend to display individual results independently.
 
-For example:
+### Bhoomi Carbon RAG Chat
 
-- A project card can display the project name, overall score, rating, confidence, and risk level.
-- A detailed project page can display all factor scores and evidence gaps.
-- A comparison page can use the peer comparison results.
-- A chat or AI interface can use the generated explanation.
-- A form can submit project data directly for analysis.
+The chat service can:
 
-The frontend does not need to calculate any integrity scores itself.
+- Retrieve static Bhoomi Carbon knowledge from Pinecone
+- Answer platform and carbon-credit questions
+- Respond in supported languages
+- Explain live listings supplied in the current request
+- Explain companies supplied in the current request
+- Explain deterministic results supplied through request context
+- Preserve the boundary between AI explanations and deterministic calculations
+
+Static knowledge is stored in Pinecone. Live listings, companies, and deterministic platform results are request-scoped and are not intended to become permanent knowledge-base records.
 
 ---
 
@@ -78,98 +86,211 @@ The frontend does not need to calculate any integrity scores itself.
                               │
                               ▼
                  Website / Backend / API Client
+```
+
+The Bhoomi Carbon chat flow is separate:
+
+```text
+Frontend / Main Backend
+          │
+          ▼
+      POST /api/chat
+          │
+          ├──────────────► Request-Scoped Live Context
+          │                (Listings / Companies / Deterministic Results)
+          │
+          ▼
+   Pinecone Knowledge Retrieval
+          │
+          ▼
+      Gemini Explanation
+          │
+          ▼
+       Chat Response
+```
+
+The main backend may run this service separately, for example on port `3001`.
 
 ---
 
 ## Supported Languages
 
-The service supports:
+The service currently supports:
 
-- English: `en`
-- Hindi: `hi`
-- Punjabi: `pa`
-- Marathi: `mr`
+| Language | Code |
+|---|---|
+| English | `en` |
+| Hindi | `hi` |
+| Punjabi | `pa` |
+| Marathi | `mr` |
 
-Both `/api/chat` and the optional AI explanation generated by `/api/analyze-project` support these languages.
+Both `/api/chat` and the optional `aiExplanation` generated by `/api/analyze-project` support these languages.
+
+### Language Resolution
 
 Language resolution follows these rules:
 
 1. A valid explicit `language` value takes priority.
-2. Otherwise, the language is detected from the question.
+2. Otherwise, the language is detected from the supplied question.
 3. Gurmukhi text resolves to Punjabi (`pa`).
 4. Devanagari text is resolved between Hindi and Marathi using deterministic language markers.
-5. Uncertain Devanagari defaults to Hindi (`hi`).
-6. Latin-script questions resolve to English (`en`).
-7. If no usable question or language signal exists, English (`en`) is used.
-8. Invalid language values return a `400` error.
+5. Marathi is selected only when Marathi-specific signals outweigh Hindi signals.
+6. Uncertain Devanagari defaults to Hindi (`hi`).
+7. Latin-script questions resolve to English (`en`).
+8. If no usable question or language signal exists, English (`en`) is used.
+9. Invalid language values return an HTTP `400` error.
 
-The resolved language is included as `language` in the project analysis response.
+The resolved language is returned as `language` in the project-analysis response.
 
-Scores, risks, peer comparisons, pricing, project IDs, registries, numeric values, and other deterministic structured fields remain unchanged across languages. Only the optional `aiExplanation` is localized.
+Scores, risks, peer comparisons, pricing, project IDs, registry names, numeric values, and other deterministic structured fields remain unchanged across languages. Only the optional AI-generated explanation is localized.
 
 ---
 
-## Setup
+## Requirements
 
-Install dependencies:
+- Node.js
+- npm
+- A compatible Pinecone index for RAG functionality
+- Google Gemini credentials for AI-generated explanations and chat
+- The voluntary registry Excel workbook for project lookup and peer analysis
+
+---
+
+## Installation
+
+Clone the repository and install dependencies:
 
 ```bash
 npm install
+```
 
-Create a .env file in the project root. Do not commit it.
+Build the TypeScript project:
 
+```bash
+npm run build
+```
+
+---
+
+## Environment Configuration
+
+Create a `.env` file in the project root. Do **not** commit this file.
+
+You can use `.env.example` as a template.
+
+```env
 GOOGLE_API_KEY=
 PINECONE_API_KEY=
 PINECONE_INDEX=carbon-rag
 GEMINI_MODEL=gemini-3.6-flash
 APP_PORT=3001
 EXCEL_DB_PATH=./Voluntary-Registry-Offsets-Database--v2026-04.xlsx
+```
 
-You can use .env.example as a template.
+### Environment Variables
 
-EXCEL_DB_PATH is optional when the workbook is located in the repository root. PORT is also accepted as a fallback for APP_PORT.
+| Variable | Purpose |
+|---|---|
+| `GOOGLE_API_KEY` | Google Gemini API credential |
+| `PINECONE_API_KEY` | Pinecone API credential |
+| `PINECONE_INDEX` | Pinecone index containing Bhoomi Carbon knowledge |
+| `GEMINI_MODEL` | Gemini model used for AI generation |
+| `APP_PORT` | Port used by the API server |
+| `PORT` | Optional fallback if `APP_PORT` is not provided |
+| `EXCEL_DB_PATH` | Optional path to the project workbook |
 
-Build and Run
+`EXCEL_DB_PATH` is optional when the expected workbook is located in the repository root.
 
-Build the project:
+The default API port is `3001` unless overridden through `APP_PORT` or `PORT`.
 
-npm run build
+---
 
-Run the API:
+## Running the Service
 
+Build and start the API:
+
+```bash
 npm run api
+```
 
-Or:
+Or use:
 
+```bash
 npm start
+```
 
-The default API port is 3001 unless overridden through APP_PORT or PORT.
+The `api` script compiles the project and starts:
 
-Testing
+```text
+dist/api.js
+```
 
-Run all tests:
+---
 
+## Testing
+
+Run the complete test suite:
+
+```bash
 npm test
+```
 
-The test suite covers deterministic project analysis, pricing behavior, language resolution, explicit language priority, automatic language detection, invalid language handling, and deterministic cross-language behavior.
+The test suite covers the deterministic analysis pipeline and includes behavior such as:
 
-Knowledge Ingestion
+- Project analysis
+- Pricing behavior
+- `askedPrice: 0` handling
+- `askingPrice` compatibility alias
+- Language resolution
+- Explicit language priority
+- Automatic Hindi detection
+- Punjabi detection
+- Marathi detection
+- English detection
+- Default-language fallback
+- Invalid language rejection
+- Deterministic cross-language behavior
+- Benchmark-unavailable pricing behavior
 
-Ensure the configured Pinecone index exists.
+Build verification can also be run separately:
+
+```bash
+npm run build
+```
+
+---
+
+## Knowledge Ingestion
+
+Ensure that the configured Pinecone index exists before ingestion.
 
 To ingest or update static Bhoomi Carbon knowledge:
 
+```bash
 npm run ingest:knowledge
+```
 
-Knowledge ingestion uses stable vector IDs and Pinecone upserts, so rerunning ingestion updates existing knowledge chunks instead of intentionally creating duplicates.
+Knowledge ingestion uses stable vector IDs and Pinecone upserts so that rerunning ingestion updates existing knowledge chunks instead of intentionally creating duplicate records.
 
-Static Bhoomi Carbon knowledge is retrieved from Pinecone. Live listings, companies, and deterministic results supplied by the main backend remain request-scoped context.
+Static knowledge can cover Bhoomi Carbon platform information and supported explanatory knowledge in the configured languages.
 
-API
-Deterministic Project Analysis
-Endpoint
+Live marketplace records and deterministic results supplied by an upstream backend remain request-scoped rather than replacing the static knowledge base.
+
+---
+
+# API
+
+## 1. Deterministic Project Analysis
+
+### Endpoint
+
+```http
 POST /api/analyze-project
-Example
+```
+
+### Example Request
+
+```json
 {
   "projectId": "ACR138",
   "askedPrice": 500,
@@ -177,22 +298,13 @@ Example
   "question": "इस परियोजना की गुणवत्ता और जोखिम समझाइए",
   "language": "hi"
 }
+```
 
-The response contains:
-
-summary
-language
-normalizedData
-integrityScore
-riskIndicators
-greenwashingRisk
-peerComparison
-priceAssessment
-aiExplanation
-Manual Project Analysis
+### Example Manual Project Request
 
 Project data can also be supplied manually:
 
+```json
 {
   "project": {
     "projectName": "Example project",
@@ -204,124 +316,221 @@ Project data can also be supplied manually:
   "askedPrice": 500,
   "currency": "INR"
 }
+```
 
-askingPrice is also accepted as a compatibility alias for askedPrice.
+`askingPrice` is also accepted as a compatibility alias for `askedPrice`.
 
-An asking price of 0 remains a valid supplied price.
+An asking price of `0` remains a valid supplied price.
 
-Integrity Analysis
+### Response Structure
+
+The response contains:
+
+```text
+summary
+language
+normalizedData
+integrityScore
+riskIndicators
+greenwashingRisk
+peerComparison
+priceAssessment
+aiExplanation
+```
+
+`aiExplanation` may be `null` if AI generation or knowledge retrieval is unavailable. Deterministic analysis remains available independently of the optional explanation layer.
+
+---
+
+## Integrity Analysis
 
 The deterministic project analysis evaluates applicable factors including:
 
-Verification
-Additionality
-Permanence
-Double Counting Risk
-Methodology Quality
-Vintage
+1. Verification
+2. Additionality
+3. Permanence
+4. Double Counting Risk
+5. Methodology Quality
+6. Vintage
 
-Not-applicable factors are not automatically treated as positive evidence.
+Not-applicable factors are not automatically treated as positive evidence. They are handled according to the deterministic scoring logic rather than being assumed to improve a project's score.
 
-The resulting integrity score is a deterministic evidence-based heuristic based on the available structured dataset. It is not a guarantee of environmental integrity, carbon-credit validity, or future project performance.
+The resulting integrity score is a deterministic evidence-based heuristic based on the available structured dataset.
 
-Peer Comparison
+It is **not** a guarantee of:
 
-Projects are compared with available peers using relevant characteristics such as:
+- Environmental integrity
+- Carbon-credit validity
+- Project legitimacy
+- Future project performance
 
-Project type
-Country
-Registry
-Methodology
+---
+
+## Risk and Greenwashing Assessment
+
+The analysis can return risk indicators, evidence gaps, limitations, and a greenwashing-risk assessment based on the available structured information.
+
+Missing information is treated as an evidence gap or analytical uncertainty.
+
+Missing data alone is **not** proof of:
+
+- Fraud
+- Greenwashing
+- Misleading claims
+- Poor project quality
+
+---
+
+## Peer Comparison
+
+Projects can be compared with available peers using relevant characteristics such as:
+
+- Project type
+- Country
+- Registry
+- Methodology
 
 The response can include:
 
-Number of comparable projects
-Comparable projects
-Average integrity score
-Median integrity score
-Comparison summary
+- Number of comparable projects
+- Comparable projects
+- Average integrity score
+- Median integrity score
+- Comparison summary
 
-Peer comparison is an integrity-score comparison only. It is not a market-price benchmark.
+Peer comparison is an **integrity-score comparison only**. It is not a market-price benchmark.
 
-Price Assessment
+---
+
+## Price Assessment
 
 Price assessment is deterministic and independent of Gemini, Pinecone, and RAG.
 
-The current dataset does not contain verified:
+The currently available project dataset does not contain verified:
 
-Transaction prices
-Listing prices
-Market prices
-Benchmark prices
+- Transaction prices
+- Listing prices
+- Market prices
+- Benchmark prices
 
-Therefore, the pricing system currently uses:
+Therefore, the pricing system currently operates in:
 
+```text
 NO_VERIFIED_PRICE_BENCHMARK
+```
+
+### No Asking Price
 
 When no valid asking price is supplied:
 
+```text
 status: NO_ASKING_PRICE
+```
+
+### Asking Price Without a Verified Benchmark
 
 When an asking price is supplied but no verified benchmark exists:
 
+```text
 status: BENCHMARK_UNAVAILABLE
+```
 
-The system does not fabricate:
+Benchmark-derived fields remain unavailable rather than being fabricated.
 
-Benchmark prices
-Quality tiers for pricing
-Quality multipliers
-Fair prices
-Price differences
-Fair or unfair price judgments
+The system does **not** fabricate:
 
-A verified deterministic benchmark-price source and compatible currency data are required before a real fair-price calculation can be enabled.
+- Benchmark prices
+- Pricing quality tiers
+- Quality multipliers
+- Fair prices
+- Price differences
+- Fair or unfair price judgments
 
-AI Explanation
+A verified deterministic benchmark-price source and compatible currency data are required before real fair-price calculation can be enabled.
 
-The AI explanation is generated only after deterministic analysis is complete.
+The pricing module includes a boundary for integrating such a verified source in the future.
 
-It explains the structured analysis in the resolved language while preserving project IDs, registry names, numeric values, and technical fields where necessary.
+---
 
-The AI layer does not calculate or override deterministic:
+## AI Explanation
 
-Integrity scores
-Risk results
-Pricing results
-Peer comparison results
-Quality scores
-Optimizer outputs
-Anomaly results
+The AI explanation runs only after the deterministic analysis has been completed.
 
-If Gemini or knowledge retrieval is unavailable, deterministic analysis can still succeed with:
+It receives the deterministic analysis result and relevant knowledge context and explains the result in the resolved language.
 
-aiExplanation: null
-Bhoomi Carbon Chat
-Endpoint
+The language instruction preserves project IDs, registry names, numeric values, and technical fields where necessary.
+
+The AI layer does **not** calculate or override deterministic:
+
+- Integrity scores
+- Risk results
+- Greenwashing results
+- Pricing results
+- Peer comparison results
+- Quality scores
+- Optimizer outputs
+- Anomaly results
+
+If Gemini or knowledge retrieval is unavailable, the deterministic analysis can still succeed with:
+
+```json
+{
+  "aiExplanation": null
+}
+```
+
+---
+
+## 2. Bhoomi Carbon Chat
+
+### Endpoint
+
+```http
 POST /api/chat
-Basic Request
+```
+
+### Basic Request
+
+```json
 {
   "question": "How is the quality score calculated?",
   "language": "en"
 }
-Punjabi Example
+```
+
+### Punjabi Example
+
+```json
 {
   "question": "Bhoomi Carbon ਕੀ ਹੈ?",
   "language": "pa"
 }
+```
 
-The response includes:
+### Response
 
+The chat response includes:
+
+```text
 answer
 language
 sources
 knowledgeSourcesUsed
 listingsUsed
 companiesUsed
-Live Context
+```
 
-The main backend can provide live request-scoped data:
+The returned language represents the language selected for the response.
 
+---
+
+## Live Request Context
+
+An upstream backend can provide live request-scoped data to the chat endpoint.
+
+For example:
+
+```json
 {
   "question": "Which of these listings has the strongest supplied integrity profile?",
   "language": "en",
@@ -338,25 +547,147 @@ The main backend can provide live request-scoped data:
     "optimizerResult": "Use only if supplied by deterministic backend"
   }
 }
+```
 
 The chatbot can explain deterministic values supplied in the current request but does not independently recalculate or override them.
 
-Important Limitations
+Request-scoped live data is separate from static Pinecone knowledge.
 
-This service analyzes the structured data and knowledge available to it.
+---
+
+## Error Handling
+
+Invalid project-analysis input such as an unsupported language returns an HTTP `400` response.
+
+For example:
+
+```json
+{
+  "language": "fr"
+}
+```
+
+returns an error equivalent to:
+
+```json
+{
+  "error": "Invalid language. Supported values are: en, hi, pa, mr."
+}
+```
+
+Malformed JSON is also handled as a client request error.
+
+Chat requests distinguish invalid requests from unavailable chat dependencies and unexpected generation failures according to the API's configured error handling.
+
+---
+
+## Important Limitations
+
+This service analyzes only the structured data and knowledge available to it.
 
 It does not independently verify:
 
-Registry records
-Carbon-credit ownership
-Historical project claims
-Baseline scenarios
-Additionality claims
-Scientific methodology validity
-Verifier activity
-Market transactions
-Market prices
+- Registry records
+- Carbon-credit ownership
+- Historical project claims
+- Baseline scenarios
+- Additionality claims
+- Scientific methodology validity
+- Verifier activity
+- Market transactions
+- Market prices
+- External carbon-credit claims
 
-Missing information represents an evidence gap or analytical uncertainty. Missing data alone is not proof of fraud, greenwashing, misleading claims, or poor project quality.
+The presence of a registry name, verifier name, document link, or other recorded field does not mean that Carbon AI independently confirmed that information.
 
-The output is informational and should not be treated as investment, financial, legal, or purchasing advice.
+The output is informational and should not be treated as:
+
+- Investment advice
+- Financial advice
+- Legal advice
+- Purchasing advice
+- A guarantee of carbon-credit quality or validity
+
+---
+
+## Design Principles
+
+Carbon AI separates deterministic computation from AI explanation.
+
+```text
+Structured Data
+      │
+      ▼
+Deterministic Analysis
+      │
+      ├── Integrity Scoring
+      ├── Risk Assessment
+      ├── Greenwashing Assessment
+      ├── Peer Comparison
+      └── Price Assessment
+      │
+      ▼
+Deterministic Result
+      │
+      ▼
+Optional AI / RAG Explanation
+```
+
+This separation ensures that language generation does not silently alter deterministic scores, calculations, or structured outputs.
+
+---
+
+## Available npm Scripts
+
+```text
+npm run build
+npm run api
+npm start
+npm test
+npm run test:analyze
+npm run ingest:knowledge
+npm run ingest:pdf
+```
+
+### Script Summary
+
+| Command | Purpose |
+|---|---|
+| `npm run build` | Compile TypeScript |
+| `npm run api` | Compile and start the API |
+| `npm start` | Run the API script |
+| `npm test` | Compile and run the test suite |
+| `npm run test:analyze` | Alias for the analysis test suite |
+| `npm run ingest:knowledge` | Compile and ingest static Bhoomi Carbon knowledge |
+| `npm run ingest:pdf` | Compile and run PDF ingestion |
+
+---
+
+## Integration
+
+Carbon AI is intended to act as a backend service within a larger system.
+
+Possible integrations include:
+
+- Carbon-credit marketplaces
+- Project dashboards
+- Project-detail pages
+- Backend services
+- AI-assisted carbon-credit interfaces
+- Comparison tools
+
+For example:
+
+- A project card can display the project name, integrity score, rating, confidence, and risk level.
+- A detailed project page can display factor scores and evidence gaps.
+- A comparison page can use peer-comparison results.
+- A chat interface can explain deterministic results without recalculating them.
+- A form can submit project data directly for analysis.
+
+The consuming frontend or backend does not need to reproduce the deterministic integrity-scoring pipeline itself.
+
+---
+
+## License
+
+ISC
