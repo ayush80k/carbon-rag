@@ -1,8 +1,13 @@
-# Carbon AI — Carbon Project Intelligence API
+# Carbon AI — Bhoomi Carbon RAG Service
 
-Carbon AI is a backend intelligence and analysis system for evaluating carbon-credit projects using structured project data.
+Carbon AI is a TypeScript backend intelligence and analysis service for evaluating carbon-credit projects using structured project data.
 
-It accepts carbon project information, normalizes the available data, evaluates multiple integrity factors, identifies evidence gaps and risks, compares projects with similar projects, and generates an AI-readable explanation of the analysis.
+It has two separate responsibilities:
+
+- `POST /api/analyze-project` performs deterministic carbon-project analysis: integrity factors, risks, peer comparison, and benchmark-limited price assessment.
+- `POST /api/chat` is the Bhoomi Carbon RAG chatbot. It retrieves static platform knowledge from Pinecone and explains request-scoped live data supplied by the main backend.
+
+The chatbot never calculates or overrides prices, optimizer outputs, quality scores, integrity scores, or anomaly results. It can only explain deterministic values supplied in context. The service does not independently verify carbon credits.
 
 The system is designed to be integrated into an existing website, backend, dashboard, marketplace, or other application.
 
@@ -30,7 +35,7 @@ For a carbon project, Carbon AI can provide:
 - Comparable project analysis
 - Peer average and median scores
 - Asking-price assessment when price data is provided
-- AI-generated explanation of the complete analysis
+- Multilingual AI-generated explanation of the complete analysis
 
 The output is structured JSON, allowing any frontend or backend to display individual results wherever required.
 
@@ -46,30 +51,30 @@ The frontend does not need to calculate any integrity scores itself.
 
 ---
 
-# Architecture
+## Architecture
 
 ```text
-                    Project Data
-                         │
-                         ▼
-                 Carbon AI Backend
-                         │
-          ┌──────────────┼──────────────┐
-          ▼              ▼              ▼
-    Normalization      Scoring      Peer Analysis
-          │              │              │
-          └──────────────┼──────────────┘
-                         ▼
-                 Risk Assessment
-                         │
-                         ▼
-                 Price Assessment
-                         │
-                         ▼
-                AI Explanation Layer
-                         │
-                         ▼
-                 Structured JSON Output
-                         │
-                         ▼
-              Website / Backend / API Client
+                         Project Data
+                              │
+                              ▼
+                      Carbon AI Backend
+                              │
+              ┌───────────────┼───────────────┐
+              ▼               ▼               ▼
+        Normalization      Scoring      Peer Analysis
+              │               │               │
+              └───────────────┼───────────────┘
+                              ▼
+                      Risk Assessment
+                              │
+                              ▼
+                      Price Assessment
+                              │
+                              ▼
+                     AI Explanation Layer
+                              │
+                              ▼
+                    Structured JSON Output
+                              │
+                              ▼
+                 Website / Backend / API Client

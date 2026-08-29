@@ -6,6 +6,7 @@
   "scripts": {
     "build": "tsc",
     "ingest:pdf": "tsc && node dist/ingestPdf.js",
+    "ingest:knowledge": "tsc && node dist/knowledge/ingestKnowledge.js",
     "api": "tsc && node dist/api.js",
     "start": "npm run api",
     "test": "tsc -p tsconfig.test.json && node --test .test-dist/test/analyze.test.js",

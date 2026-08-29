@@ -1,3 +1,5 @@
+import type { BhoomiLanguage } from "./language.js";
+
 export type EvidenceStatus = "strong" | "partial" | "insufficient" | "not_applicable";
 export type RiskLevel = "Low" | "Moderate" | "High" | "Unknown";
 
@@ -33,8 +35,11 @@ export interface AnalysisRequest {
   projectId?: string;
   project?: Partial<NormalizedProject>;
   askedPrice?: number | null;
+  /** Compatibility alias accepted by the analysis endpoint. */
+  askingPrice?: number | null;
   currency?: string | null;
   question?: string;
+  language?: BhoomiLanguage;
 }
 
 export interface IntegrityFactor {
@@ -105,16 +110,43 @@ export interface PeerComparison {
   comparisonSummary: string;
 }
 
-export interface PriceAssessment {
-  mode: "BENCHMARK_AVAILABLE" | "NO_VERIFIED_PRICE_BENCHMARK";
+export interface NoVerifiedPriceBenchmarkAssessment {
+  mode: "NO_VERIFIED_PRICE_BENCHMARK";
+  status: "NO_ASKING_PRICE" | "BENCHMARK_UNAVAILABLE";
   askedPrice: number | null;
   currency: string | null;
+  benchmarkPrice: null;
+  qualityTier: null;
+  qualityMultiplier: null;
+  calculatedFairPrice: null;
+  priceDifference: null;
+  priceDifferencePercent: null;
   assessment: string;
-  benchmarkMean?: number;
+  limitations: string[];
 }
+
+/** Reserved for a future verified benchmark provider; no implementation currently produces this mode. */
+export interface BenchmarkAvailablePriceAssessment {
+  mode: "BENCHMARK_AVAILABLE";
+  status: "BENCHMARK_CALCULATED";
+  askedPrice: number | null;
+  currency: string;
+  benchmarkPrice: number;
+  qualityTier: "green" | "yellow" | "red";
+  qualityMultiplier: 1 | 0.5 | 0.24;
+  calculatedFairPrice: number;
+  priceDifference: number | null;
+  priceDifferencePercent: number | null;
+  assessment: string;
+  limitations: string[];
+}
+
+export type PriceAssessment = NoVerifiedPriceBenchmarkAssessment | BenchmarkAvailablePriceAssessment;
 
 export interface ProjectAnalysisResult {
   summary: string;
+  /** Resolved language used only for aiExplanation. Deterministic fields remain unchanged. */
+  language: BhoomiLanguage;
   normalizedData: Partial<NormalizedProject>;
   integrityScore: IntegrityScore;
   riskIndicators: RiskIndicator;

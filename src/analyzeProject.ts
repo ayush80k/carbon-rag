@@ -4,6 +4,7 @@ import { assessGreenwashingRisk, calculateIntegrityScore, evaluateRisk } from ".
 import { comparePeers } from "./comparison.js";
 import { assessPrice } from "./pricing.js";
 import { generateExplanation, getKnowledgeContext } from "./carbonAI.js";
+import { resolveLanguage } from "./language.js";
 
 export interface AnalysisOptions {
   /** Test seam: avoids Excel loading while production continues to use the cached database. */
@@ -12,13 +13,14 @@ export interface AnalysisOptions {
 }
 
 export async function analyzeProjectPipeline(request: AnalysisRequest, options: AnalysisOptions = {}): Promise<ProjectAnalysisResult> {
+  const language = resolveLanguage(request.language, request.question);
   const normalizedData = normalizeInput(request);
   const integrityScore = calculateIntegrityScore(normalizedData);
   const riskIndicators = evaluateRisk(normalizedData, integrityScore);
   const greenwashingRisk = assessGreenwashingRisk(integrityScore, riskIndicators);
   const peerComparison = comparePeers(normalizedData, options.peerProjects);
-  const priceAssessment = assessPrice(request.askedPrice, request.currency);
-  const baseResult = { summary: "Analysis Complete", normalizedData, integrityScore, riskIndicators, greenwashingRisk, peerComparison, priceAssessment };
+  const priceAssessment = assessPrice(request.askedPrice ?? request.askingPrice, request.currency);
+  const baseResult = { summary: "Analysis Complete", language, normalizedData, integrityScore, riskIndicators, greenwashingRisk, peerComparison, priceAssessment };
 
   let aiExplanation: string | null = null;
   if (options.includeAiExplanation !== false) {

@@ -2,8 +2,9 @@ import "dotenv/config";
 import { Pinecone } from "@pinecone-database/pinecone";
 import { ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings } from "@langchain/google-genai";
 import { ProjectAnalysisResult } from "./types.js";
+import { languageInstruction } from "./language.js";
 
-const INDEX_NAME = "carbon-rag";
+const INDEX_NAME = process.env.PINECONE_INDEX || "carbon-rag";
 const KNOWLEDGE_NAMESPACE = "carbon-knowledge";
 
 function formatPrice(askedPrice: number | null, currency: string | null): string {
@@ -34,6 +35,9 @@ export async function generateExplanation(structuredData: Omit<ProjectAnalysisRe
   const prompt = `You are Carbon AI. Explain the deterministic analysis below; do not calculate, alter, or invent any score, project fact, price, market benchmark, or peer result.
 
 The structured analysis is the only source for project-specific conclusions. Retrieved knowledge is general supporting context only. Do not claim fraud, greenwashing, double counting, or project legitimacy as fact. Clearly distinguish recorded indicators from evidence gaps. Respect each factor's evidenceStatus and applicability, especially not_applicable permanence. Explain factorCoverage as scoreability of applicable factors and evidenceCoverage as underlying evidence completeness. Use cautious wording such as "based on the available dataset", "available evidence suggests", and "cannot independently verify" where relevant. Do not describe indirect additionality evidence or registry traceability as proof. The integrity score is a heuristic, not a guarantee. Do not make investment or purchasing decisions. If price mode is NO_VERIFIED_PRICE_BENCHMARK, state that a definitive fair-price judgment cannot be made.
+
+LANGUAGE REQUIREMENT:
+${languageInstruction(structuredData.language)}
 
 STRUCTURED ANALYSIS:
 ${JSON.stringify(structuredData, null, 2)}
